@@ -499,7 +499,7 @@ label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
       Зарегистрироваться →
     </button>
     <button class="wlc-btn-login" onclick="goToLogin()">
-      Уже есть аккаунт — Войти
+      Войти
     </button>
   </div>
 </div>
@@ -750,27 +750,29 @@ let photos = [];
 
 // ── Load rates + balance from Google Sheets ──
 async function loadSheetData() {
+  const profile = getProfile();
+  // Используем userId из профиля (надёжнее чем tg.user, который недоступен вне бота)
+  const uid = profile?.userId || user?.id || 'unknown';
+
   try {
-    const uid = user?.id || 'demo';
     const res = await fetch(`${SHEET_API_URL}?action=getData&userId=${uid}`);
     const data = await res.json();
 
-    // Rates
-    if(data.rates) {
+    if (data.rates) {
       rates = { ...rates, ...data.rates };
       renderRates();
       updateQuickRate();
     }
 
-    // Balance
-    if(data.balance) {
-      userBalance = data.balance;
+    // Баланс из таблицы — всегда актуальный
+    if (data.balance !== undefined) {
+      userBalance.rub = data.balance.rub ?? 0;
       renderBalance();
     }
   } catch(e) {
-    // Fallback to demo data if Sheet not configured
-    rates = { CNY_RUB: 12.85, USD_RUB: 92.40, USD_CNY: 7.19, updated: 'Демо-режим' };
-    userBalance = { rub: 0, cny: 0 };
+    // Fallback — демо данные
+    rates = { CNY_RUB: 12.85, updated: 'Демо-режим' };
+    userBalance = { rub: 0 };
     renderRates();
     updateQuickRate();
     renderBalance();
@@ -797,8 +799,6 @@ function renderBalance() {
 function renderRates() {
   const rateList = [
     { flags:'🇨🇳🇷🇺', name:'Юань', sub:'CNY → RUB', key:'CNY_RUB', unit:'₽ за 1 ¥' },
-    { flags:'🇺🇸🇷🇺', name:'Доллар', sub:'USD → RUB', key:'USD_RUB', unit:'₽ за 1 $' },
-    { flags:'🇺🇸🇨🇳', name:'Доллар', sub:'USD → CNY', key:'USD_CNY', unit:'¥ за 1 $' },
   ];
 
   const html = rateList.map(r => {
@@ -1032,7 +1032,7 @@ function goToLogin() {
     btn.style.borderColor = 'var(--a)';
     btn.style.color = 'var(--a)';
     setTimeout(() => {
-      btn.textContent = 'Уже есть аккаунт — Войти';
+      btn.textContent = 'Войти';
       btn.style.borderColor = '';
       btn.style.color = '';
     }, 2000);
@@ -1090,7 +1090,7 @@ function validateField(inputId, errId, msg) {
   return true;
 }
 
-function submitRegistration() {
+async function submitRegistration() {
   // Validate required fields
   const okLast  = validateField('rLastName',  'rErrLastName',  'Введите фамилию');
   const okFirst = validateField('rFirstName', 'rErrFirstName', 'Введите имя');
@@ -1108,26 +1108,41 @@ function submitRegistration() {
   const prefix = opt.dataset.prefix || '+7';
 
   const profile = {
-    lastName:    document.getElementById('rLastName').value.trim(),
-    firstName:   document.getElementById('rFirstName').value.trim(),
-    middleName:  document.getElementById('rMiddleName').value.trim(),
-    phone:       prefix + ' ' + document.getElementById('rPhone').value.trim(),
-    citizenship: cit,
-    citizenshipName: opt.text.replace(/^.{1,2}\s/, ''),
-    userId:      user?.id || 'unknown',
-    registeredAt: new Date().toISOString()
+    lastName:        document.getElementById('rLastName').value.trim(),
+    firstName:       document.getElementById('rFirstName').value.trim(),
+    middleName:      document.getElementById('rMiddleName').value.trim(),
+    phone:           prefix + ' ' + document.getElementById('rPhone').value.trim(),
+    citizenship:     cit,
+    citizenshipName: opt.text.replace(/^\S+\s/, '').trim(),
+    userId:          String(user?.id || 'tg_' + Date.now()),
+    telegramName:    user?.first_name || '',
+    username:        user?.username || '',
+    registeredAt:    new Date().toISOString()
   };
 
+  const btn = document.getElementById('regSubmitBtn');
+  btn.innerHTML = '<span class="spin"></span> Сохранение...';
+  btn.disabled = true;
+
+  // ── Сохраняем локально сразу ──
   saveProfile(profile);
 
-  // Notify bot about new registration
-  if (tg) {
-    tg.sendData(JSON.stringify({ action: 'register', profile }));
+  // ── Отправляем в Google Sheets напрямую через fetch ──
+  try {
+    const res = await fetch(SHEET_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'register', profile })
+    });
+    const result = await res.json();
+    console.log('Register result:', result);
+  } catch(e) {
+    console.warn('Sheets unavailable, saved locally only:', e);
   }
 
-  const btn = document.getElementById('regSubmitBtn');
-  btn.textContent = '✓ Готово!';
+  btn.innerHTML = '✓ Готово!';
   btn.style.background = 'var(--green)';
+  btn.style.color = '#000';
 
   if (tg) tg.HapticFeedback?.notificationOccurred('success');
 
@@ -1139,7 +1154,7 @@ function submitRegistration() {
       hideScreen('welcomeScreen');
       loadSheetData();
     }, 400);
-  }, 700);
+  }, 800);
 }
 
 function skipReg(e) {
