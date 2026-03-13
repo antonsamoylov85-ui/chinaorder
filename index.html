@@ -1042,7 +1042,6 @@ function goToLogin() {
 // Format phone number as user types
 function formatPhone(input) {
   let val = input.value.replace(/\D/g, '');
-  // limit length
   val = val.slice(0, 10);
   let formatted = '';
   if (val.length > 0) formatted = val.slice(0, 3);
@@ -1050,6 +1049,18 @@ function formatPhone(input) {
   if (val.length >= 7) formatted += '-' + val.slice(6, 8);
   if (val.length >= 9) formatted += '-' + val.slice(8, 10);
   input.value = formatted;
+  // Валидация в реальном времени
+  const digits = val.length;
+  const errEl = document.getElementById('rErrPhone');
+  const inputEl = document.getElementById('rPhone');
+  if (digits > 0 && digits < 10) {
+    inputEl.classList.add('error');
+    errEl.classList.add('show');
+    errEl.textContent = `Введите 10 цифр (сейчас ${digits})`;
+  } else if (digits === 10) {
+    inputEl.classList.remove('error');
+    errEl.classList.remove('show');
+  }
 }
 
 // Update phone prefix badge from selected country
@@ -1094,7 +1105,26 @@ async function submitRegistration() {
   // Validate required fields
   const okLast  = validateField('rLastName',  'rErrLastName',  'Введите фамилию');
   const okFirst = validateField('rFirstName', 'rErrFirstName', 'Введите имя');
-  const okPhone = validateField('rPhone',     'rErrPhone',     'Введите номер телефона');
+  const okPhone = (() => {
+    const val = document.getElementById('rPhone').value.replace(/\D/g, '');
+    const errEl = document.getElementById('rErrPhone');
+    const inputEl = document.getElementById('rPhone');
+    if (!val) {
+      inputEl.classList.add('error');
+      errEl.classList.add('show');
+      errEl.textContent = 'Введите номер телефона';
+      return false;
+    }
+    if (val.length < 10) {
+      inputEl.classList.add('error');
+      errEl.classList.add('show');
+      errEl.textContent = `Номер слишком короткий (${val.length} из 10 цифр)`;
+      return false;
+    }
+    inputEl.classList.remove('error');
+    errEl.classList.remove('show');
+    return true;
+  })();
 
   const cit = document.getElementById('rCitizenship').value;
   const citErr = document.getElementById('rErrCitizenship');
