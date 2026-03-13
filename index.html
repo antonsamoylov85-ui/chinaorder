@@ -1,326 +1,1391 @@
-// ChinaOrder — Google Apps Script
-// Привязан к таблице: открывать через Расширения → Apps Script
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ChinaOrder</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700;900&family=Golos+Text:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #09090e;
+  --s1: #111118;
+  --s2: #18181f;
+  --s3: #22222c;
+  --border: rgba(255,255,255,0.07);
+  --a: #f0c040;
+  --a2: #e8914a;
+  --red: #f05050;
+  --green: #50d090;
+  --text: #eeeef5;
+  --muted: #66667a;
+  --font: 'Golos Text', sans-serif;
+  --display: 'Unbounded', sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;flex-direction:column}
 
-const SHEET_RATES    = 'Курсы';
-const SHEET_BALANCES = 'Балансы';
-const SHEET_ORDERS   = 'Заявки';
+/* Noise overlay */
+body::after{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:9999;opacity:.4}
 
-// CORS — разрешаем запросы из браузера
-function doOptions(e) {
-  return ContentService.createTextOutput('')
-    .setMimeType(ContentService.MimeType.TEXT);
+/* Header */
+.hdr{flex-shrink:0;padding:14px 18px 0;display:flex;flex-direction:column;gap:12px;background:var(--s1);border-bottom:1px solid var(--border);position:relative;z-index:10}
+.hdr-top{display:flex;align-items:center;justify-content:space-between}
+.logo{display:flex;align-items:center;gap:9px}
+.logo-mark{width:32px;height:32px;background:linear-gradient(135deg,var(--a),var(--a2));border-radius:8px;display:grid;place-items:center;font-size:16px;flex-shrink:0}
+.logo-name{font-family:var(--display);font-size:14px;font-weight:700;letter-spacing:-0.3px}
+.logo-name em{color:var(--a);font-style:normal}
+
+/* Balance chip */
+.balance-chip{display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:7px 12px;cursor:pointer;transition:border-color .2s}
+.balance-chip:active{border-color:var(--a)}
+.bal-label{font-size:10px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
+.bal-value{font-family:var(--display);font-size:15px;font-weight:700;color:var(--a);line-height:1}
+.bal-sep{width:1px;height:22px;background:var(--border)}
+.cny-value{font-family:var(--display);font-size:12px;font-weight:600;color:var(--muted);line-height:1}
+.cny-val-sub{font-size:9px;color:var(--muted);margin-top:1px}
+
+/* Rate ticker button */
+.rate-btn{display:flex;align-items:center;gap:6px;background:var(--s3);border:1px solid var(--border);border-radius:8px;padding:5px 10px;cursor:pointer;font-size:12px;color:var(--muted);transition:all .2s;flex-shrink:0}
+.rate-btn:active{background:var(--a);color:#000;border-color:var(--a)}
+.rate-dot{width:6px;height:6px;background:var(--green);border-radius:50%;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* Tabs */
+.tabs{display:flex;gap:2px;padding:0 0 0;background:transparent}
+.tab{flex:1;padding:9px 8px;border:none;background:transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.tab.active{color:var(--a);border-bottom-color:var(--a)}
+
+/* Scroll area */
+.scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.scroll::-webkit-scrollbar{display:none}
+.page{display:none;padding:16px 18px 80px}
+.page.active{display:block}
+
+/* Cards */
+.card{background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
+.card-label{font-family:var(--display);font-size:9px;font-weight:700;letter-spacing:1.8px;text-transform:uppercase;color:var(--a);margin-bottom:12px}
+
+/* Platform chips */
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{padding:6px 13px;border-radius:20px;border:1px solid var(--border);background:var(--s2);font-size:12px;cursor:pointer;transition:all .15s;color:var(--muted);font-family:var(--font)}
+.chip.sel{background:rgba(240,192,64,.12);border-color:var(--a);color:var(--a)}
+
+/* Inputs */
+input,textarea,select{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;color:var(--text);font-family:var(--font);font-size:14px;outline:none;transition:border-color .15s;-webkit-appearance:none}
+input:focus,textarea:focus{border-color:var(--a)}
+textarea{resize:none;min-height:76px;line-height:1.5}
+label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
+.igrp{margin-bottom:12px}
+
+/* Photo upload */
+.upload{border:2px dashed var(--border);border-radius:12px;padding:22px;text-align:center;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.upload.has{border-color:rgba(240,192,64,.4);background:rgba(240,192,64,.04)}
+.upload input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;padding:0;border:none;background:none;font-size:0}
+.upload-icon{font-size:28px;margin-bottom:6px}
+.upload-hint{font-size:12px;color:var(--muted)}
+.upload-hint strong{color:var(--a)}
+.prev-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}
+.prev-item{aspect-ratio:1;border-radius:8px;overflow:hidden;position:relative}
+.prev-item img{width:100%;height:100%;object-fit:cover;border:none;padding:0}
+.prev-rm{position:absolute;top:3px;right:3px;width:18px;height:18px;background:rgba(0,0,0,.75);border-radius:50%;border:none;color:#fff;font-size:9px;cursor:pointer;display:grid;place-items:center}
+
+/* Submit */
+.submit{width:100%;padding:15px;background:linear-gradient(135deg,var(--a),var(--a2));border:none;border-radius:13px;color:#000;font-family:var(--display);font-size:14px;font-weight:700;cursor:pointer;transition:opacity .15s;letter-spacing:.3px}
+.submit:active{opacity:.85}
+.submit:disabled{opacity:.5}
+
+/* Order cards */
+.ocard{background:var(--s1);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;animation:fadeUp .3s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.ocard-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.oid{font-family:var(--display);font-size:12px;font-weight:700}
+.sbadge{padding:3px 9px;border-radius:20px;font-size:10px;font-weight:600}
+.s-new{background:rgba(240,192,64,.12);color:var(--a)}
+.s-processing{background:rgba(232,145,74,.12);color:var(--a2)}
+.s-ordered{background:rgba(130,120,255,.12);color:#a09aff}
+.s-shipping{background:rgba(60,200,240,.12);color:#40c8f0}
+.s-delivered{background:rgba(80,208,144,.12);color:var(--green)}
+.odesc{font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ometa{font-size:11px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+.oprice{font-family:var(--display);font-size:14px;font-weight:700;color:var(--a)}
+.othumbs{display:flex;gap:4px;margin-bottom:8px}
+.othumb{width:36px;height:36px;border-radius:6px;object-fit:cover;border:none;padding:0}
+
+/* Empty */
+.empty{text-align:center;padding:50px 20px}
+.empty-ico{font-size:44px;margin-bottom:12px}
+.empty-t{font-family:var(--display);font-size:16px;font-weight:700;margin-bottom:6px}
+.empty-s{font-size:13px;color:var(--muted)}
+
+/* ─── RATES DRAWER ─── */
+.drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;opacity:0;pointer-events:none;transition:opacity .25s;backdrop-filter:blur(4px)}
+.drawer-overlay.open{opacity:1;pointer-events:all}
+.drawer{position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-radius:20px 20px 0 0;border-top:1px solid var(--border);z-index:201;transform:translateY(100%);transition:transform .35s cubic-bezier(.32,1,.3,1);max-height:85vh;display:flex;flex-direction:column}
+.drawer.open{transform:translateY(0)}
+.drawer-handle{width:36px;height:4px;background:var(--s3);border-radius:2px;margin:12px auto 0}
+.drawer-head{padding:16px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.drawer-title{font-family:var(--display);font-size:14px;font-weight:700}
+.drawer-close{background:var(--s2);border:none;width:28px;height:28px;border-radius:50%;color:var(--muted);font-size:16px;cursor:pointer;display:grid;place-items:center}
+.drawer-body{padding:16px 20px 24px;overflow-y:auto;flex:1}
+
+/* Rate rows */
+.rate-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)}
+.rate-row:last-of-type{border-bottom:none}
+.rate-pair{display:flex;align-items:center;gap:10px}
+.rate-flags{font-size:22px;line-height:1}
+.rate-name{font-size:13px;font-weight:500}
+.rate-sub{font-size:10px;color:var(--muted)}
+.rate-val{text-align:right}
+.rate-num{font-family:var(--display);font-size:16px;font-weight:700;color:var(--a)}
+.rate-unit{font-size:10px;color:var(--muted);margin-top:1px}
+.rate-change{font-size:10px;margin-top:1px}
+.up{color:var(--green)}
+.dn{color:var(--red)}
+
+/* Converter */
+.conv-block{background:var(--s2);border-radius:13px;padding:16px;margin-top:16px}
+.conv-title{font-family:var(--display);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+.conv-row{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.conv-input-wrap{flex:1;position:relative}
+.conv-input{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:10px 38px 10px 12px;font-family:var(--display);font-size:18px;font-weight:700;color:var(--text);width:100%;outline:none;transition:border-color .15s}
+.conv-input:focus{border-color:var(--a)}
+.conv-cur{position:absolute;right:11px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted);font-weight:600;pointer-events:none}
+.conv-arrow{color:var(--a);font-size:18px;flex-shrink:0}
+.conv-result{background:var(--s1);border:1px solid rgba(240,192,64,.2);border-radius:10px;padding:10px 38px 10px 12px;font-family:var(--display);font-size:18px;font-weight:700;color:var(--a);flex:1;position:relative}
+.conv-result-cur{position:absolute;right:11px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--a);opacity:.6;font-weight:600}
+.conv-note{font-size:11px;color:var(--muted);margin-top:8px;text-align:center}
+.conv-updated{font-size:10px;color:var(--muted);text-align:center;margin-top:4px}
+
+/* Toast */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--green);color:#000;padding:10px 22px;border-radius:24px;font-weight:600;font-size:13px;z-index:500;transition:transform .4s cubic-bezier(.34,1.56,.64,1);white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+/* Spinner */
+.spin{width:16px;height:16px;border:2px solid rgba(0,0,0,.3);border-top-color:#000;border-radius:50%;animation:rot .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* ─── WELCOME SCREEN ─── */
+.welcome-screen{
+  position:fixed;inset:0;z-index:1100;
+  background:var(--bg);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.welcome-screen.hidden{display:none}
+
+.wlc-bg{
+  position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, rgba(240,192,64,.12) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 90% 80%, rgba(232,145,74,.08) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 30% at 10% 60%, rgba(240,192,64,.06) 0%, transparent 50%);
+  pointer-events:none;
+}
+.wlc-grid{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(240,192,64,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(240,192,64,.04) 1px,transparent 1px);
+  background-size:36px 36px;
+  pointer-events:none;
 }
 
-function doGet(e) {
-  const action = e.parameter.action;
-  const userId = e.parameter.userId;
-  let result;
-  switch(action) {
-    case 'getData':    result = getClientData(userId); break;
-    case 'adminData':  result = getAdminData(); break;
-    case 'checkUser':  result = checkUser(userId); break;
-    default:           result = { status: 'ok', message: 'ChinaOrder API работает!' };
-  }
-  return jsonResponse(result);
+.wlc-body{
+  flex:1;display:flex;flex-direction:column;
+  padding:0 24px;
+  position:relative;z-index:1;
+  justify-content:center;
 }
 
-function doPost(e) {
-  let body;
+/* Floating logo */
+.wlc-logo-wrap{
+  display:flex;flex-direction:column;align-items:center;
+  margin-bottom:40px;
+}
+.wlc-icon{
+  width:72px;height:72px;
+  background:linear-gradient(135deg,var(--a),var(--a2));
+  border-radius:22px;
+  display:grid;place-items:center;
+  font-size:34px;
+  box-shadow:0 0 0 1px rgba(240,192,64,.2), 0 16px 48px rgba(240,192,64,.25);
+  margin-bottom:18px;
+  animation:iconFloat 3s ease-in-out infinite;
+}
+@keyframes iconFloat{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-6px)}
+}
+.wlc-title{
+  font-family:var(--display);font-size:28px;font-weight:900;
+  letter-spacing:-1.5px;text-align:center;line-height:1.1;
+  margin-bottom:8px;
+}
+.wlc-title em{color:var(--a);font-style:normal}
+.wlc-tagline{
+  font-size:14px;color:var(--muted);text-align:center;line-height:1.5;
+}
+
+/* Features list */
+.wlc-features{
+  display:flex;flex-direction:column;gap:10px;
+  margin-bottom:40px;
+}
+.wlc-feat{
+  display:flex;align-items:center;gap:12px;
+  background:var(--s1);border:1px solid var(--border);
+  border-radius:12px;padding:12px 14px;
+  animation:featIn .5s ease both;
+}
+.wlc-feat:nth-child(1){animation-delay:.1s}
+.wlc-feat:nth-child(2){animation-delay:.2s}
+.wlc-feat:nth-child(3){animation-delay:.3s}
+.wlc-feat:nth-child(4){animation-delay:.4s}
+@keyframes featIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.wlc-feat-icon{
+  width:36px;height:36px;border-radius:10px;
+  background:rgba(240,192,64,.1);
+  display:grid;place-items:center;font-size:18px;flex-shrink:0;
+}
+.wlc-feat-text strong{display:block;font-size:13px;font-weight:600;margin-bottom:1px}
+.wlc-feat-text span{font-size:11px;color:var(--muted)}
+
+/* Bottom buttons */
+.wlc-footer{
+  flex-shrink:0;padding:0 24px 36px;
+  position:relative;z-index:1;
+  display:flex;flex-direction:column;gap:10px;
+}
+.wlc-btn-reg{
+  width:100%;padding:16px;
+  background:linear-gradient(135deg,var(--a),var(--a2));
+  border:none;border-radius:14px;
+  color:#000;font-family:var(--display);font-size:15px;font-weight:700;
+  cursor:pointer;letter-spacing:.3px;
+  transition:opacity .15s,transform .1s;
+  position:relative;overflow:hidden;
+}
+.wlc-btn-reg::after{content:'';position:absolute;inset:0;background:linear-gradient(rgba(255,255,255,.15),transparent)}
+.wlc-btn-reg:active{transform:scale(.98);opacity:.9}
+
+.wlc-btn-login{
+  width:100%;padding:14px;
+  background:transparent;
+  border:1.5px solid var(--border);border-radius:14px;
+  color:var(--text);font-family:var(--display);font-size:14px;font-weight:600;
+  cursor:pointer;letter-spacing:.3px;
+  transition:border-color .15s,background .15s;
+}
+.wlc-btn-login:active{border-color:var(--a);background:rgba(240,192,64,.05)}
+
+/* ─── REGISTRATION SCREEN ─── */
+.reg-screen{
+  position:fixed;inset:0;z-index:1000;
+  background:var(--bg);
+  display:flex;flex-direction:column;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.reg-screen.hidden{display:none}
+
+/* Decorative top band */
+.reg-top-band{
+  flex-shrink:0;
+  height:220px;
+  position:relative;
+  overflow:hidden;
+  background:linear-gradient(160deg,#0d0d14 0%,#1a140a 100%);
+}
+.reg-top-band::before{
+  content:'';position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 80%, rgba(240,192,64,.18) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 20% 20%, rgba(232,145,74,.10) 0%, transparent 60%);
+}
+.reg-grid-lines{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(240,192,64,.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(240,192,64,.06) 1px, transparent 1px);
+  background-size:40px 40px;
+  mask-image:linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.6) 40%, transparent 100%);
+}
+.reg-brand{
+  position:absolute;bottom:28px;left:0;right:0;
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+}
+.reg-brand-icon{
+  width:56px;height:56px;
+  background:linear-gradient(135deg,var(--a),var(--a2));
+  border-radius:16px;
+  display:grid;place-items:center;
+  font-size:26px;
+  box-shadow:0 8px 32px rgba(240,192,64,.3);
+}
+.reg-brand-name{
+  font-family:var(--display);font-size:20px;font-weight:900;letter-spacing:-1px;
+}
+.reg-brand-name em{color:var(--a);font-style:normal}
+.reg-brand-sub{font-size:12px;color:var(--muted);letter-spacing:.3px}
+
+/* Form area */
+.reg-form-area{
+  flex:1;
+  padding:28px 20px 40px;
+  display:flex;flex-direction:column;gap:0;
+}
+.reg-heading{
+  margin-bottom:24px;
+}
+.reg-heading h2{
+  font-family:var(--display);font-size:17px;font-weight:700;
+  margin-bottom:5px;letter-spacing:-.3px;
+}
+.reg-heading p{font-size:13px;color:var(--muted);line-height:1.5}
+
+.reg-field{margin-bottom:14px}
+.reg-label{
+  display:flex;align-items:center;gap:6px;
+  font-size:11px;color:var(--muted);
+  margin-bottom:6px;font-weight:500;letter-spacing:.3px;text-transform:uppercase;
+}
+.reg-label-dot{
+  width:4px;height:4px;border-radius:50%;background:var(--a);flex-shrink:0;
+}
+.reg-input{
+  width:100%;
+  background:var(--s2);
+  border:1.5px solid var(--border);
+  border-radius:12px;
+  padding:13px 15px;
+  color:var(--text);
+  font-family:var(--font);
+  font-size:15px;
+  outline:none;
+  transition:border-color .2s, background .2s;
+  -webkit-appearance:none;
+}
+.reg-input:focus{
+  border-color:var(--a);
+  background:rgba(240,192,64,.04);
+}
+.reg-input.error{border-color:var(--red)}
+.reg-input::placeholder{color:var(--muted);font-size:14px}
+
+/* Country select custom */
+.reg-select-wrap{position:relative}
+.reg-select-wrap::after{
+  content:'▾';
+  position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  color:var(--a);font-size:14px;pointer-events:none;
+}
+.reg-input.reg-select{
+  appearance:none;-webkit-appearance:none;
+  padding-right:36px;
+  cursor:pointer;
+  color:var(--text);
+}
+.reg-input.reg-select option{background:var(--s2);color:var(--text)}
+
+/* Phone row */
+.reg-phone-row{display:flex;gap:8px}
+.reg-phone-prefix{
+  width:64px;flex-shrink:0;
+  background:var(--s3);
+  border:1.5px solid var(--border);
+  border-radius:12px;
+  padding:13px 10px;
+  color:var(--muted);
+  font-family:var(--font);font-size:14px;
+  text-align:center;
+  display:flex;align-items:center;justify-content:center;
+  gap:4px;
+}
+
+/* Step indicator */
+.reg-steps{
+  display:flex;align-items:center;justify-content:center;
+  gap:6px;margin-bottom:24px;
+}
+.reg-step{
+  width:28px;height:3px;border-radius:2px;
+  background:var(--s3);transition:background .3s,width .3s;
+}
+.reg-step.done{background:var(--a);width:28px}
+.reg-step.active{background:var(--a);width:40px;animation:stepPulse 1.5s infinite}
+@keyframes stepPulse{0%,100%{opacity:1}50%{opacity:.6}}
+
+/* Submit button */
+.reg-submit{
+  width:100%;
+  padding:16px;
+  background:linear-gradient(135deg,var(--a),var(--a2));
+  border:none;border-radius:14px;
+  color:#000;
+  font-family:var(--display);font-size:14px;font-weight:700;
+  cursor:pointer;transition:opacity .15s,transform .1s;
+  letter-spacing:.3px;
+  margin-top:8px;
+  position:relative;overflow:hidden;
+}
+.reg-submit::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(rgba(255,255,255,.15),transparent);
+}
+.reg-submit:active{transform:scale(.98);opacity:.9}
+.reg-submit:disabled{opacity:.5}
+
+/* Already registered hint */
+.reg-already{
+  text-align:center;margin-top:16px;
+  font-size:12px;color:var(--muted);
+}
+.reg-already a{color:var(--a);text-decoration:none}
+
+/* Field error hint */
+.reg-err{font-size:11px;color:var(--red);margin-top:4px;display:none}
+.reg-err.show{display:block}
+</style>
+</head>
+<body>
+<!-- ─── WELCOME SCREEN ─── -->
+<div class="welcome-screen" id="welcomeScreen">
+  <div class="wlc-bg"></div>
+  <div class="wlc-grid"></div>
+
+  <div class="wlc-body">
+    <div class="wlc-logo-wrap">
+      <div class="wlc-icon">🛒</div>
+      <div class="wlc-title">China<em>Order</em></div>
+      <div class="wlc-tagline">Покупаем товары из Китая<br>быстро, надёжно, под ключ</div>
+    </div>
+
+    <div class="wlc-features">
+      <div class="wlc-feat">
+        <div class="wlc-feat-icon">🏪</div>
+        <div class="wlc-feat-text">
+          <strong>Любой маркетплейс Китая</strong>
+          <span>1688, Taobao, Tmall, Alibaba, Pinduoduo</span>
+        </div>
+      </div>
+      <div class="wlc-feat">
+        <div class="wlc-feat-icon">📦</div>
+        <div class="wlc-feat-text">
+          <strong>Выкуп и доставка</strong>
+          <span>Принимаем заявки, заказываем и доставляем</span>
+        </div>
+      </div>
+      <div class="wlc-feat">
+        <div class="wlc-feat-icon">💱</div>
+        <div class="wlc-feat-text">
+          <strong>Актуальный курс юаня</strong>
+          <span>Конвертер ₽ → ¥ прямо в приложении</span>
+        </div>
+      </div>
+      <div class="wlc-feat">
+        <div class="wlc-feat-icon">📊</div>
+        <div class="wlc-feat-text">
+          <strong>Личный баланс и история</strong>
+          <span>Отслеживайте заказы и статусы онлайн</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wlc-footer">
+    <button class="wlc-btn-reg" onclick="goToRegister()">
+      Зарегистрироваться →
+    </button>
+    <button class="wlc-btn-login" onclick="goToLogin()">
+      Войти
+    </button>
+  </div>
+</div>
+<!-- ─── END WELCOME ─── -->
+
+<!-- ─── REGISTRATION SCREEN ─── -->
+<div class="reg-screen" id="regScreen">
+  <div class="reg-top-band">
+    <div class="reg-grid-lines"></div>
+    <div class="reg-brand">
+      <div class="reg-brand-icon">🛒</div>
+      <div class="reg-brand-name">China<em>Order</em></div>
+      <div class="reg-brand-sub">Покупки из Китая под ключ</div>
+    </div>
+  </div>
+
+  <div class="reg-form-area">
+    <div class="reg-steps">
+      <div class="reg-step active" id="rs1"></div>
+      <div class="reg-step" id="rs2"></div>
+      <div class="reg-step" id="rs3"></div>
+    </div>
+
+    <div class="reg-heading">
+      <h2>Регистрация</h2>
+      <p>Заполните данные один раз — они нужны для оформления заказов</p>
+    </div>
+
+    <!-- Фамилия -->
+    <div class="reg-field">
+      <div class="reg-label"><div class="reg-label-dot"></div>Фамилия</div>
+      <input class="reg-input" id="rLastName" type="text" placeholder="Иванов" autocomplete="family-name"
+        oninput="regProgress()" onblur="validateField('rLastName','rErrLastName','Введите фамилию')">
+      <div class="reg-err" id="rErrLastName">Введите фамилию</div>
+    </div>
+
+    <!-- Имя -->
+    <div class="reg-field">
+      <div class="reg-label"><div class="reg-label-dot"></div>Имя</div>
+      <input class="reg-input" id="rFirstName" type="text" placeholder="Иван" autocomplete="given-name"
+        oninput="regProgress()" onblur="validateField('rFirstName','rErrFirstName','Введите имя')">
+      <div class="reg-err" id="rErrFirstName">Введите имя</div>
+    </div>
+
+    <!-- Отчество -->
+    <div class="reg-field">
+      <div class="reg-label"><div class="reg-label-dot"></div>Отчество <span style="color:var(--muted);font-size:10px;margin-left:4px">(если есть)</span></div>
+      <input class="reg-input" id="rMiddleName" type="text" placeholder="Иванович" autocomplete="additional-name">
+    </div>
+
+    <!-- Телефон -->
+    <div class="reg-field">
+      <div class="reg-label"><div class="reg-label-dot"></div>Телефон</div>
+      <div class="reg-phone-row">
+        <div class="reg-phone-prefix" id="phonePrefix">🇷🇺 +7</div>
+        <input class="reg-input" id="rPhone" type="tel" placeholder="900 123-45-67"
+          inputmode="tel" style="flex:1"
+          oninput="formatPhone(this);regProgress()" onblur="validateField('rPhone','rErrPhone','Введите номер телефона')">
+      </div>
+      <div class="reg-err" id="rErrPhone">Введите корректный номер</div>
+    </div>
+
+    <!-- Гражданство -->
+    <div class="reg-field">
+      <div class="reg-label"><div class="reg-label-dot"></div>Гражданство</div>
+      <div class="reg-select-wrap">
+        <select class="reg-input reg-select" id="rCitizenship" onchange="updatePhonePrefix();regProgress()">
+          <option value="" disabled selected>Выберите страну...</option>
+          <optgroup label="СНГ и ближнее зарубежье">
+            <option value="RU" data-prefix="+7" data-flag="🇷🇺">🇷🇺 Россия</option>
+            <option value="KZ" data-prefix="+7" data-flag="🇰🇿">🇰🇿 Казахстан</option>
+            <option value="BY" data-prefix="+375" data-flag="🇧🇾">🇧🇾 Беларусь</option>
+            <option value="UA" data-prefix="+380" data-flag="🇺🇦">🇺🇦 Украина</option>
+            <option value="UZ" data-prefix="+998" data-flag="🇺🇿">🇺🇿 Узбекистан</option>
+            <option value="AZ" data-prefix="+994" data-flag="🇦🇿">🇦🇿 Азербайджан</option>
+            <option value="AM" data-prefix="+374" data-flag="🇦🇲">🇦🇲 Армения</option>
+            <option value="GE" data-prefix="+995" data-flag="🇬🇪">🇬🇪 Грузия</option>
+            <option value="KG" data-prefix="+996" data-flag="🇰🇬">🇰🇬 Кыргызстан</option>
+            <option value="MD" data-prefix="+373" data-flag="🇲🇩">🇲🇩 Молдова</option>
+            <option value="TJ" data-prefix="+992" data-flag="🇹🇯">🇹🇯 Таджикистан</option>
+            <option value="TM" data-prefix="+993" data-flag="🇹🇲">🇹🇲 Туркменистан</option>
+            <option value="LT" data-prefix="+370" data-flag="🇱🇹">🇱🇹 Литва</option>
+            <option value="LV" data-prefix="+371" data-flag="🇱🇻">🇱🇻 Латвия</option>
+            <option value="EE" data-prefix="+372" data-flag="🇪🇪">🇪🇪 Эстония</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="reg-err" id="rErrCitizenship">Выберите гражданство</div>
+    </div>
+
+    <button class="reg-submit" id="regSubmitBtn" onclick="submitRegistration()">
+      Зарегистрироваться →
+    </button>
+
+    <div class="reg-already">
+      Уже зарегистрированы? <a href="#" onclick="skipReg(event)">Войти</a>
+    </div>
+  </div>
+</div>
+<!-- ─── END REGISTRATION ─── -->
+
+<div class="hdr">
+  <div class="hdr-top">
+    <div class="logo">
+      <div class="logo-mark">🛒</div>
+      <div class="logo-name">China<em>Order</em></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="rate-btn" onclick="openRates()">
+        <div class="rate-dot"></div>
+        <span id="quickRate">¥ —</span>
+      </button>
+      <div class="balance-chip" onclick="openRates()">
+        <div>
+          <div class="bal-label">Баланс</div>
+          <div class="bal-value" id="balRub">— ₽</div>
+        </div>
+        <div class="bal-sep"></div>
+        <div>
+          <div class="cny-val-sub">≈</div>
+          <div class="cny-value" id="balCny">— ¥</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" id="tab-new" onclick="switchTab('new')">✦ Новая заявка</button>
+    <button class="tab" id="tab-orders" onclick="switchTab('orders')">📦 Мои заказы</button>
+  </div>
+</div>
+
+<div class="scroll">
+  <!-- NEW ORDER -->
+  <div class="page active" id="page-new">
+    <div style="height:14px"></div>
+
+    <div class="card">
+      <div class="card-label">Площадка</div>
+      <div class="chips" id="platChips">
+        <div class="chip sel" onclick="selPlat(this,'1688')">1688.com</div>
+        <div class="chip" onclick="selPlat(this,'Taobao')">Taobao</div>
+        <div class="chip" onclick="selPlat(this,'Tmall')">Tmall</div>
+        <div class="chip" onclick="selPlat(this,'Alibaba')">Alibaba</div>
+        <div class="chip" onclick="selPlat(this,'Pinduoduo')">Pinduoduo</div>
+        <div class="chip" onclick="selPlat(this,'Другое')">Другое</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Товар</div>
+      <div class="igrp">
+        <label>Ссылка на товар</label>
+        <div style="display:flex;gap:8px;align-items:stretch">
+          <input type="url" id="fUrl" placeholder="Вставьте ссылку с 1688, Taobao..." inputmode="url" style="flex:1" oninput="onUrlInput()">
+          <button id="fetchBtn" onclick="fetchProduct()" style="flex-shrink:0;padding:0 14px;background:var(--a);color:#000;border:none;border-radius:12px;font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap">Загрузить</button>
+        </div>
+        <div id="fetchStatus" style="font-size:11px;color:var(--muted);margin-top:5px;display:none"></div>
+      </div>
+
+      <!-- Превью товара -->
+      <div id="productPreview" style="display:none;margin-bottom:12px;background:var(--s2);border:1px solid var(--border);border-radius:14px;padding:12px;display:none">
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <img id="previewImg" src="" style="width:64px;height:64px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid var(--border)">
+          <div style="flex:1;min-width:0">
+            <div id="previewName" style="font-size:13px;font-weight:600;line-height:1.4;margin-bottom:4px"></div>
+            <div id="previewPrice" style="font-size:12px;color:var(--a);font-weight:700"></div>
+            <div id="previewShop" style="font-size:10px;color:var(--muted);margin-top:2px"></div>
+          </div>
+          <button onclick="clearPreview()" style="background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;flex-shrink:0;padding:0 0 0 4px">✕</button>
+        </div>
+      </div>
+
+      <div class="igrp">
+        <label>Описание — что нужно, цвет, размер, количество</label>
+        <textarea id="fDesc" placeholder="Например: кроссовки Nike Air Force 1, белые, размер 42, 1 пара"></textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Фото товара</div>
+      <div class="upload" id="uploadZone">
+        <input type="file" id="photoInput" accept="image/*" multiple onchange="handlePhotos(this)">
+        <div class="upload-icon">📷</div>
+        <div class="upload-hint">Нажмите чтобы добавить фото<br><strong>до 5 изображений</strong></div>
+      </div>
+      <div class="prev-grid" id="prevGrid"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Детали</div>
+      <div class="igrp">
+        <label>Количество</label>
+        <input type="number" id="fQty" value="1" min="1" inputmode="numeric">
+      </div>
+      <div class="igrp">
+        <label>Бюджет (¥)</label>
+        <input type="number" id="fBudget" placeholder="Примерная сумма в юанях" inputmode="numeric">
+      </div>
+      <div class="igrp" style="margin-bottom:0">
+        <label>Комментарий</label>
+        <textarea id="fComment" placeholder="Особые пожелания..." style="min-height:56px"></textarea>
+      </div>
+    </div>
+
+    <button class="submit" id="submitBtn" onclick="submitOrder()">Отправить заявку →</button>
+    <div style="height:20px"></div>
+  </div>
+
+  <!-- ORDERS -->
+  <div class="page" id="page-orders">
+    <div style="height:14px"></div>
+    <div id="ordersList"></div>
+  </div>
+</div>
+
+<!-- ─── RATES DRAWER ─── -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeRates()"></div>
+<div class="drawer" id="ratesDrawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-head">
+    <div class="drawer-title">💱 Курсы валют</div>
+    <button class="drawer-close" onclick="closeRates()">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div id="rateRows">
+      <div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Загрузка курсов...</div>
+    </div>
+
+    <!-- Converter -->
+    <div class="conv-block">
+      <div class="conv-title">Конвертер ₽ → ¥</div>
+      <div class="conv-row">
+        <div class="conv-input-wrap">
+          <input class="conv-input" type="number" id="convRub" placeholder="0" inputmode="numeric" oninput="convertCurrency()">
+          <span class="conv-cur">₽</span>
+        </div>
+        <div class="conv-arrow">→</div>
+        <div style="flex:1;position:relative">
+          <div class="conv-result" id="convResult">0</div>
+          <span class="conv-result-cur">¥</span>
+        </div>
+      </div>
+      <div class="conv-note" id="convNote">Введите сумму в рублях</div>
+      <div class="conv-updated" id="convUpdated"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">✓ Заявка отправлена!</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if(tg){tg.ready();tg.expand()}
+const user = tg?.initDataUnsafe?.user;
+
+// ═══════════════════════════════════════════════════════
+// НАСТРОЙКА — замените на свой Google Sheets ID и имена листов
+// После публикации таблицы как веб-приложение (Apps Script)
+// вставьте URL сюда:
+const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbwIbP5mv_zHmIfOmwexC3ym-MjsTbIrEYC8IJAecsp7mZ5fynMZOtRGZji_S4g8-A/exec";
+// ═══════════════════════════════════════════════════════
+
+let rates = { CNY_RUB: null, USD_RUB: null, USD_CNY: null, updated: null };
+let userBalance = { rub: null, cny: null };
+let selectedPlatform = '1688';
+let photos = [];
+
+// ── Load rates + balance from Google Sheets ──
+async function loadSheetData() {
+  const profile = getProfile();
+  // Используем userId из профиля (надёжнее чем tg.user, который недоступен вне бота)
+  const uid = profile?.userId || user?.id || 'unknown';
+
   try {
-    // Поддержка как application/json так и text/plain (no-cors из браузера)
-    const raw = e.postData.contents;
-    body = JSON.parse(raw);
-  } catch(err) {
-    return jsonResponse({ error: 'Invalid JSON' });
+    const res = await fetch(`${SHEET_API_URL}?action=getData&userId=${uid}`);
+    const data = await res.json();
+
+    if (data.rates) {
+      rates = { ...rates, ...data.rates };
+      renderRates();
+      updateQuickRate();
+    }
+
+    // Баланс из таблицы — всегда актуальный
+    if (data.balance !== undefined) {
+      userBalance.rub = data.balance.rub ?? 0;
+      renderBalance();
+    }
+  } catch(e) {
+    // Fallback — демо данные
+    rates = { CNY_RUB: 12.85, updated: 'Демо-режим' };
+    userBalance = { rub: 0 };
+    renderRates();
+    updateQuickRate();
+    renderBalance();
   }
-  let result;
-  switch(body.action) {
-    case 'syncData':      result = syncData(body.orders, body.clients); break;
-    case 'updateBalance': result = updateBalance(body.userId, body.amount); break;
-    case 'newOrder':      result = addOrder(body.order); break;
-    case 'register':      result = registerClient(body.profile); break;
-    default:              result = { error: 'Unknown action' };
-  }
-  return jsonResponse(result);
 }
 
-function jsonResponse(data) {
-  return ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
+function updateQuickRate() {
+  if(rates.CNY_RUB) document.getElementById('quickRate').textContent = `¥ = ${rates.CNY_RUB} ₽`;
 }
 
-// Проверяет зарегистрирован ли пользователь по Telegram ID
-function checkUser(userId) {
-  if (!userId) return { registered: false };
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const balSheet = ss.getSheetByName(SHEET_BALANCES);
-  if (!balSheet) return { registered: false };
-  const rows = balSheet.getDataRange().getValues();
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(userId)) {
-      const profile = {
-        userId:          String(rows[i][0]),
-        lastName:        rows[i][1] || '',
-        firstName:       rows[i][2] || '',
-        middleName:      rows[i][3] || '',
-        phone:           rows[i][4] || '',
-        citizenship:     rows[i][5] || '',
-        citizenshipName: rows[i][5] || '',
-        balRub:          rows[i][6] || 0,
-        registeredAt:    rows[i][7] || ''
-      };
-      return { registered: true, profile };
+function renderBalance() {
+  const rubEl = document.getElementById('balRub');
+  const cnyEl = document.getElementById('balCny');
+  rubEl.textContent = userBalance.rub !== null ? `${Number(userBalance.rub).toLocaleString('ru')} ₽` : '— ₽';
+  // Convert balance to CNY
+  if(userBalance.rub !== null && rates.CNY_RUB) {
+    const cny = (userBalance.rub / rates.CNY_RUB).toFixed(0);
+    cnyEl.textContent = `${Number(cny).toLocaleString('ru')} ¥`;
+  } else {
+    cnyEl.textContent = '— ¥';
+  }
+}
+
+function renderRates() {
+  const rateList = [
+    { flags:'🇨🇳🇷🇺', name:'Юань', sub:'CNY → RUB', key:'CNY_RUB', unit:'₽ за 1 ¥' },
+  ];
+
+  const html = rateList.map(r => {
+    const val = rates[r.key];
+    if(!val) return '';
+    return `
+      <div class="rate-row">
+        <div class="rate-pair">
+          <div class="rate-flags">${r.flags}</div>
+          <div>
+            <div class="rate-name">${r.name}</div>
+            <div class="rate-sub">${r.sub}</div>
+          </div>
+        </div>
+        <div class="rate-val">
+          <div class="rate-num">${val}</div>
+          <div class="rate-unit">${r.unit}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('rateRows').innerHTML = html || '<div style="color:var(--muted);font-size:13px;padding:10px 0">Курсы не загружены</div>';
+
+  if(rates.updated) {
+    document.getElementById('convUpdated').textContent = `Обновлено: ${rates.updated}`;
+  }
+  convertCurrency();
+}
+
+function convertCurrency() {
+  const rubVal = parseFloat(document.getElementById('convRub').value) || 0;
+  const resultEl = document.getElementById('convResult');
+  const noteEl = document.getElementById('convNote');
+
+  if(!rates.CNY_RUB) { resultEl.textContent = '—'; return; }
+  if(rubVal <= 0) { resultEl.textContent = '0'; noteEl.textContent = 'Введите сумму в рублях'; return; }
+
+  const cny = (rubVal / rates.CNY_RUB).toFixed(2);
+  resultEl.textContent = Number(cny).toLocaleString('ru', {maximumFractionDigits:2});
+  noteEl.textContent = `${rubVal.toLocaleString('ru')} ₽ = ${cny} ¥ по курсу ${rates.CNY_RUB} ₽/¥`;
+}
+
+// ── Drawer ──
+function openRates() {
+  document.getElementById('drawerOverlay').classList.add('open');
+  document.getElementById('ratesDrawer').classList.add('open');
+  if(tg) tg.HapticFeedback?.impactOccurred('light');
+}
+function closeRates() {
+  document.getElementById('drawerOverlay').classList.remove('open');
+  document.getElementById('ratesDrawer').classList.remove('open');
+}
+
+// ── Autofill by URL ──
+// ЗАМЕНИТЕ 'YOUR_ELIM_API_KEY' на свой ключ после регистрации на elim.asia
+const ELIM_API_KEY = 'YOUR_ELIM_API_KEY';
+
+function onUrlInput() {
+  const url = document.getElementById('fUrl').value.trim();
+  if (!url) return;
+  // Автоматически выбираем площадку по ссылке
+  const platMap = {
+    '1688.com': '1688',
+    'taobao.com': 'Taobao',
+    'tmall.com': 'Tmall',
+    'alibaba.com': 'Alibaba',
+    'pinduoduo.com': 'Pinduoduo',
+    'poizon.com': 'Другое',
+    'dewu.com': 'Другое',
+  };
+  for (const [domain, plat] of Object.entries(platMap)) {
+    if (url.includes(domain)) {
+      const chip = [...document.querySelectorAll('#platChips .chip')]
+        .find(c => c.textContent.trim().startsWith(plat.replace('.com','')));
+      if (chip) selPlat(chip, plat);
+      break;
     }
   }
-  return { registered: false };
 }
 
-function getClientData(userId) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+async function fetchProduct() {
+  const url = document.getElementById('fUrl').value.trim();
+  if (!url) { showFetchStatus('Вставьте ссылку на товар', 'error'); return; }
 
-  // Курсы валют
-  const ratesSheet = ss.getSheetByName(SHEET_RATES);
-  let rates = {};
-  if (ratesSheet) {
-    const data = ratesSheet.getDataRange().getValues();
-    // Пропускаем заголовок (строка 1 = ['Ключ','Значение','Обновлено'])
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0] && data[i][1]) {
-        rates[data[i][0]] = parseFloat(data[i][1]);
-        if (data[i][2]) rates.updated = String(data[i][2]);
+  const btn = document.getElementById('fetchBtn');
+  btn.textContent = '⏳';
+  btn.disabled = true;
+  showFetchStatus('Загружаем данные товара...', 'info');
+
+  // Если реальный ключ не задан — показываем заглушку
+  if (ELIM_API_KEY === 'YOUR_ELIM_API_KEY') {
+    await new Promise(r => setTimeout(r, 1200)); // эмуляция задержки
+    fillProductDemo(url);
+    btn.textContent = 'Загрузить';
+    btn.disabled = false;
+    return;
+  }
+
+  // ── Реальный запрос к ElimAPI ──
+  try {
+    const resp = await fetch(`https://api.elim.asia/v1/item/get?url=${encodeURIComponent(url)}&lang=ru`, {
+      headers: { 'Authorization': `Bearer ${ELIM_API_KEY}` }
+    });
+    const data = await resp.json();
+    if (data && data.item) {
+      fillProduct(data.item);
+    } else {
+      showFetchStatus('Не удалось загрузить товар. Заполните вручную.', 'error');
+    }
+  } catch(e) {
+    showFetchStatus('Ошибка соединения. Заполните вручную.', 'error');
+  }
+  btn.textContent = 'Загрузить';
+  btn.disabled = false;
+}
+
+function fillProductDemo(url) {
+  // Определяем платформу для демо-данных
+  let name = 'Товар с китайского маркетплейса';
+  let price = '¥ 299';
+  let shop = 'Магазин';
+  let img = '';
+
+  if (url.includes('1688')) {
+    name = 'Оптовый товар с 1688 (демо)';
+    price = '¥ 45 / шт';
+    shop = '广州批发商 · 1688.com';
+  } else if (url.includes('taobao')) {
+    name = 'Товар с Taobao (демо)';
+    price = '¥ 189';
+    shop = 'Taobao магазин';
+  } else if (url.includes('tmall')) {
+    name = 'Товар с Tmall (демо)';
+    price = '¥ 399';
+    shop = 'Официальный магазин · Tmall';
+  } else if (url.includes('pinduoduo')) {
+    name = 'Товар с Pinduoduo (демо)';
+    price = '¥ 89';
+    shop = 'Pinduoduo';
+  }
+
+  document.getElementById('previewName').textContent = name;
+  document.getElementById('previewPrice').textContent = price;
+  document.getElementById('previewShop').textContent = shop;
+  document.getElementById('previewImg').style.display = 'none';
+
+  document.getElementById('productPreview').style.display = 'block';
+  if (!document.getElementById('fDesc').value) {
+    document.getElementById('fDesc').value = name;
+  }
+  showFetchStatus('⚠️ Демо-режим. Подключите ElimAPI для реальных данных.', 'warn');
+}
+
+function fillProduct(item) {
+  const name = item.title || item.name || '';
+  const price = item.price ? `¥ ${item.price}` : '';
+  const shop = item.shop_name || item.seller || '';
+  const img = (item.main_images || item.images || [])[0] || item.pic_url || '';
+
+  document.getElementById('previewName').textContent = name;
+  document.getElementById('previewPrice').textContent = price;
+  document.getElementById('previewShop').textContent = shop;
+
+  const imgEl = document.getElementById('previewImg');
+  if (img) { imgEl.src = img; imgEl.style.display = 'block'; }
+  else { imgEl.style.display = 'none'; }
+
+  document.getElementById('productPreview').style.display = 'block';
+  if (name && !document.getElementById('fDesc').value) {
+    document.getElementById('fDesc').value = name;
+  }
+  showFetchStatus('✓ Товар загружен', 'ok');
+}
+
+function clearPreview() {
+  document.getElementById('productPreview').style.display = 'none';
+  document.getElementById('fetchStatus').style.display = 'none';
+  document.getElementById('fUrl').value = '';
+  document.getElementById('previewImg').src = '';
+}
+
+function showFetchStatus(msg, type) {
+  const el = document.getElementById('fetchStatus');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.color = type === 'error' ? 'var(--red)' : type === 'ok' ? 'var(--green)' : type === 'warn' ? 'var(--a)' : 'var(--muted)';
+}
+
+// ── Platform ──
+function selPlat(el, name) {
+  document.querySelectorAll('#platChips .chip').forEach(c => c.classList.remove('sel'));
+  el.classList.add('sel');
+  selectedPlatform = name;
+}
+
+// ── Photos ──
+function handlePhotos(input) {
+  photos = Array.from(input.files).slice(0,5);
+  const grid = document.getElementById('prevGrid');
+  grid.innerHTML = '';
+  document.getElementById('uploadZone').classList.toggle('has', photos.length > 0);
+  photos.forEach((f,i) => {
+    const r = new FileReader();
+    r.onload = e => {
+      const d = document.createElement('div');
+      d.className = 'prev-item';
+      d.innerHTML = `<img src="${e.target.result}"><button class="prev-rm" onclick="removePhoto(${i})">✕</button>`;
+      grid.appendChild(d);
+    };
+    r.readAsDataURL(f);
+  });
+}
+function removePhoto(i) {
+  photos.splice(i,1);
+  const dt = new DataTransfer();
+  photos.forEach(f => dt.items.add(f));
+  const inp = document.getElementById('photoInput');
+  inp.files = dt.files;
+  handlePhotos(inp);
+}
+
+// ── Tab ──
+function switchTab(t) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-'+t).classList.add('active');
+  document.getElementById('tab-'+t).classList.add('active');
+  if(t === 'orders') renderOrders();
+}
+
+// ── Orders storage (local) ──
+function getOrders(){ try{return JSON.parse(localStorage.getItem('co_orders')||'[]')}catch{return[]} }
+function saveOrder(o){ const arr=getOrders(); arr.unshift(o); localStorage.setItem('co_orders',JSON.stringify(arr)) }
+
+// ── Submit ──
+async function submitOrder() {
+  const desc = document.getElementById('fDesc').value.trim();
+  const url = document.getElementById('fUrl').value.trim();
+  if(!desc && !url && photos.length === 0){
+    if(tg) tg.HapticFeedback?.notificationOccurred('error');
+    alert('Заполните хотя бы одно поле');
+    return;
+  }
+  const btn = document.getElementById('submitBtn');
+  btn.innerHTML = '<span class="spin"></span> Отправка...';
+  btn.disabled = true;
+
+  const photoData = [];
+  for(const f of photos){
+    await new Promise(res => { const r=new FileReader(); r.onload=e=>{photoData.push(e.target.result);res()}; r.readAsDataURL(f) });
+  }
+
+  const order = {
+    id: 'ORD-'+Date.now().toString(36).toUpperCase(),
+    platform: selectedPlatform,
+    url, description: desc,
+    qty: document.getElementById('fQty').value||'1',
+    budget: document.getElementById('fBudget').value||'',
+    comment: document.getElementById('fComment').value.trim(),
+    photos: photoData,
+    status: 'new', price: null,
+    createdAt: new Date().toISOString(),
+    userId: user?.id||'unknown',
+    userName: user?.first_name||'Клиент',
+    userUsername: user?.username||''
+  };
+
+  if(tg) tg.sendData(JSON.stringify({ action:'new_order', order:{...order,photos:photoData.length+' фото'} }));
+  saveOrder(order);
+
+  btn.innerHTML = 'Отправить заявку →';
+  btn.disabled = false;
+  ['fUrl','fDesc','fBudget','fComment'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('productPreview').style.display = 'none';
+  document.getElementById('fetchStatus').style.display = 'none';
+  document.getElementById('fQty').value='1';
+  document.getElementById('prevGrid').innerHTML='';
+  document.getElementById('uploadZone').classList.remove('has');
+  photos=[];
+
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 3000);
+  setTimeout(()=>switchTab('orders'), 1000);
+  if(tg) tg.HapticFeedback?.notificationOccurred('success');
+}
+
+// ── Render orders ──
+const ST = {
+  new:{l:'Новая',c:'s-new'}, processing:{l:'Обрабатывается',c:'s-processing'},
+  ordered:{l:'Заказан',c:'s-ordered'}, shipping:{l:'В пути',c:'s-shipping'}, delivered:{l:'Доставлен',c:'s-delivered'}
+};
+function renderOrders() {
+  const el = document.getElementById('ordersList');
+  const orders = getOrders();
+  if(!orders.length){
+    el.innerHTML=`<div class="empty"><div class="empty-ico">📭</div><div class="empty-t">Нет заказов</div><div class="empty-s">Создайте первую заявку</div></div>`;
+    return;
+  }
+  el.innerHTML = orders.map(o => {
+    const st = ST[o.status]||ST.new;
+    const d = new Date(o.createdAt).toLocaleDateString('ru',{day:'numeric',month:'short'});
+    const thumbs = (o.photos||[]).slice(0,3).map(p=>`<img class="othumb" src="${p}">`).join('');
+    return `<div class="ocard">
+      <div class="ocard-hdr"><div class="oid">${o.id}</div><div class="sbadge ${st.c}">${st.l}</div></div>
+      ${thumbs?`<div class="othumbs">${thumbs}</div>`:''}
+      <div class="odesc">${o.description||o.url||'Без описания'}</div>
+      <div class="ometa"><span>🏪 ${o.platform} · ${d} · ${o.qty} шт.</span>${o.price?`<span class="oprice">${o.price} ¥</span>`:''}</div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════
+// WELCOME / REGISTRATION FLOW
+// ═══════════════════════════════════════════
+
+function getProfile() {
+  try { return JSON.parse(localStorage.getItem('co_profile') || 'null'); } catch { return null; }
+}
+function saveProfile(p) { localStorage.setItem('co_profile', JSON.stringify(p)); }
+
+async function checkRegistration() {
+  const localProfile = getProfile();
+  const tgUserId = user?.id ? String(user.id) : null;
+
+  // Если есть локальный профиль — сразу в приложение
+  if (localProfile) {
+    hideScreen('welcomeScreen');
+    hideScreen('regScreen');
+    loadSheetData();
+    return;
+  }
+
+  // Если есть Telegram ID — проверяем регистрацию в таблице
+  if (tgUserId) {
+    try {
+      const res = await fetch(`${SHEET_API_URL}?action=checkUser&userId=${tgUserId}`);
+      const data = await res.json();
+      if (data.registered && data.profile) {
+        // Нашли в таблице — сохраняем локально и входим
+        saveProfile(data.profile);
+        hideScreen('welcomeScreen');
+        hideScreen('regScreen');
+        loadSheetData();
+        return;
       }
+    } catch(e) {
+      console.warn('Check user error:', e);
     }
   }
 
-  // Баланс пользователя (колонка G = индекс 6)
-  let balance = { rub: 0 };
-  if (userId && userId !== 'unknown') {
-    const balSheet = ss.getSheetByName(SHEET_BALANCES);
-    if (balSheet) {
-      const rows = balSheet.getDataRange().getValues();
-      for (let i = 1; i < rows.length; i++) {
-        if (String(rows[i][0]) === String(userId)) {
-          balance.rub = parseFloat(rows[i][6]) || 0;
-          break;
-        }
-      }
+  // Не найден нигде — показываем экран приветствия
+}
+
+function hideScreen(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('hidden');
+}
+
+function showScreen(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('hidden');
+}
+
+function goToRegister() {
+  if (tg) tg.HapticFeedback?.impactOccurred('light');
+  // Animate out welcome
+  const w = document.getElementById('welcomeScreen');
+  w.style.transition = 'opacity .3s, transform .3s';
+  w.style.opacity = '0';
+  w.style.transform = 'translateY(-20px)';
+  setTimeout(() => {
+    hideScreen('welcomeScreen');
+    w.style.opacity = '';
+    w.style.transform = '';
+    showScreen('regScreen');
+  }, 280);
+}
+
+function goToLogin() {
+  const profile = getProfile();
+  if (profile) {
+    // Has profile — go straight to app
+    hideScreen('welcomeScreen');
+    loadSheetData();
+  } else {
+    // No profile — must register, show hint
+    const btn = document.querySelector('.wlc-btn-login');
+    btn.textContent = 'Сначала нужно зарегистрироваться';
+    btn.style.borderColor = 'var(--a)';
+    btn.style.color = 'var(--a)';
+    setTimeout(() => {
+      btn.textContent = 'Войти';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+    }, 2000);
+  }
+}
+
+// Format phone number as user types
+function formatPhone(input) {
+  let val = input.value.replace(/\D/g, '');
+  val = val.slice(0, 10);
+  let formatted = '';
+  if (val.length > 0) formatted = val.slice(0, 3);
+  if (val.length >= 4) formatted += ' ' + val.slice(3, 6);
+  if (val.length >= 7) formatted += '-' + val.slice(6, 8);
+  if (val.length >= 9) formatted += '-' + val.slice(8, 10);
+  input.value = formatted;
+  // Валидация в реальном времени
+  const digits = val.length;
+  const errEl = document.getElementById('rErrPhone');
+  const inputEl = document.getElementById('rPhone');
+  if (digits > 0 && digits < 10) {
+    inputEl.classList.add('error');
+    errEl.classList.add('show');
+    errEl.textContent = `Введите 10 цифр (сейчас ${digits})`;
+  } else if (digits === 10) {
+    inputEl.classList.remove('error');
+    errEl.classList.remove('show');
+  }
+}
+
+// Update phone prefix badge from selected country
+function updatePhonePrefix() {
+  const sel = document.getElementById('rCitizenship');
+  const opt = sel.options[sel.selectedIndex];
+  const prefix = opt.dataset.prefix || '+7';
+  const flag = opt.dataset.flag || '🌍';
+  document.getElementById('phonePrefix').textContent = flag + ' ' + prefix;
+}
+
+// Animate step indicators as fields are filled
+function regProgress() {
+  const last  = document.getElementById('rLastName').value.trim();
+  const first = document.getElementById('rFirstName').value.trim();
+  const phone = document.getElementById('rPhone').value.trim();
+  const cit   = document.getElementById('rCitizenship').value;
+
+  const filled = [last, first, phone, cit].filter(Boolean).length;
+
+  document.getElementById('rs1').className = 'reg-step ' + (filled >= 1 ? 'done' : 'active');
+  document.getElementById('rs2').className = 'reg-step ' + (filled >= 2 ? 'done' : filled >= 1 ? 'active' : '');
+  document.getElementById('rs3').className = 'reg-step ' + (filled >= 4 ? 'done' : filled >= 2 ? 'active' : '');
+}
+
+function validateField(inputId, errId, msg) {
+  const val = document.getElementById(inputId).value.trim();
+  const errEl = document.getElementById(errId);
+  const inputEl = document.getElementById(inputId);
+  if (!val) {
+    inputEl.classList.add('error');
+    errEl.classList.add('show');
+    errEl.textContent = msg;
+    return false;
+  }
+  inputEl.classList.remove('error');
+  errEl.classList.remove('show');
+  return true;
+}
+
+async function submitRegistration() {
+  // Validate required fields
+  const okLast  = validateField('rLastName',  'rErrLastName',  'Введите фамилию');
+  const okFirst = validateField('rFirstName', 'rErrFirstName', 'Введите имя');
+  const okPhone = (() => {
+    const val = document.getElementById('rPhone').value.replace(/\D/g, '');
+    const errEl = document.getElementById('rErrPhone');
+    const inputEl = document.getElementById('rPhone');
+    if (!val) {
+      inputEl.classList.add('error');
+      errEl.classList.add('show');
+      errEl.textContent = 'Введите номер телефона';
+      return false;
     }
-  }
-
-  return { rates, balance };
-}
-
-function getAdminData() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const result = {};
-
-  const ratesSheet = ss.getSheetByName(SHEET_RATES);
-  if (ratesSheet) {
-    const data = ratesSheet.getDataRange().getValues();
-    const rates = {};
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0] && data[i][1]) rates[data[i][0]] = parseFloat(data[i][1]);
+    if (val.length < 10) {
+      inputEl.classList.add('error');
+      errEl.classList.add('show');
+      errEl.textContent = `Номер слишком короткий (${val.length} из 10 цифр)`;
+      return false;
     }
-    result.rates = rates;
+    inputEl.classList.remove('error');
+    errEl.classList.remove('show');
+    return true;
+  })();
+
+  const cit = document.getElementById('rCitizenship').value;
+  const citErr = document.getElementById('rErrCitizenship');
+  if (!cit) { citErr.classList.add('show'); }
+  else { citErr.classList.remove('show'); }
+
+  if (!okLast || !okFirst || !okPhone || !cit) return;
+
+  const sel = document.getElementById('rCitizenship');
+  const opt = sel.options[sel.selectedIndex];
+  const prefix = opt.dataset.prefix || '+7';
+
+  const profile = {
+    lastName:        document.getElementById('rLastName').value.trim(),
+    firstName:       document.getElementById('rFirstName').value.trim(),
+    middleName:      document.getElementById('rMiddleName').value.trim(),
+    phone:           prefix + ' ' + document.getElementById('rPhone').value.trim(),
+    citizenship:     cit,
+    citizenshipName: opt.text.replace(/^\S+\s/, '').trim(),
+    userId:          String(user?.id || 'tg_' + Date.now()),
+    telegramName:    user?.first_name || '',
+    username:        user?.username || '',
+    registeredAt:    new Date().toISOString()
+  };
+
+  const btn = document.getElementById('regSubmitBtn');
+  btn.innerHTML = '<span class="spin"></span> Сохранение...';
+  btn.disabled = true;
+
+  // ── Сохраняем локально сразу ──
+  saveProfile(profile);
+
+  // ── Отправляем в Google Sheets ──
+  try {
+    // Используем no-cors так как Apps Script не поддерживает CORS для POST из браузера
+    await fetch(SHEET_API_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'register', profile })
+    });
+    console.log('Register sent to Sheets');
+  } catch(e) {
+    console.warn('Sheets error:', e);
   }
 
-  const balSheet = ss.getSheetByName(SHEET_BALANCES);
-  if (balSheet) {
-    const rows = balSheet.getDataRange().getValues();
-    result.clients = rows.slice(1).filter(r => r[0]).map(r => ({
-      userId:          String(r[0]),
-      lastName:        r[1] || '',
-      firstName:       r[2] || '',
-      middleName:      r[3] || '',
-      phone:           r[4] || '',
-      citizenshipName: r[5] || '',
-      name:            [r[1],r[2],r[3]].filter(Boolean).join(' ') || 'Клиент',
-      balRub:          parseFloat(r[6]) || 0,
-      createdAt:       r[7] ? new Date(r[7]).toISOString() : new Date().toISOString()
-    }));
-  }
+  btn.innerHTML = '✓ Готово!';
+  btn.style.background = 'var(--green)';
+  btn.style.color = '#000';
 
-  const ordSheet = ss.getSheetByName(SHEET_ORDERS);
-  if (ordSheet) {
-    const rows = ordSheet.getDataRange().getValues();
-    result.orders = rows.slice(1).filter(r => r[0]).map(r => ({
-      id:          r[0],
-      userId:      String(r[1]),
-      userName:    r[2] || '',
-      platform:    r[3] || '',
-      url:         r[4] || '',
-      description: r[5] || '',
-      qty:         r[6] || '1',
-      budget:      r[7] || '',
-      comment:     r[8] || '',
-      status:      r[9] || 'new',
-      price:       r[10] || null,
-      createdAt:   r[11] ? new Date(r[11]).toISOString() : new Date().toISOString()
-    }));
-  }
+  if (tg) tg.HapticFeedback?.notificationOccurred('success');
 
-  return result;
+  setTimeout(() => {
+    document.getElementById('regScreen').style.transition = 'opacity .4s';
+    document.getElementById('regScreen').style.opacity = '0';
+    setTimeout(() => {
+      hideScreen('regScreen');
+      hideScreen('welcomeScreen');
+      loadSheetData();
+    }, 400);
+  }, 800);
 }
 
-function registerClient(profile) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let balSheet = ss.getSheetByName(SHEET_BALANCES);
-  if (!balSheet) {
-    balSheet = ss.insertSheet(SHEET_BALANCES);
-    balSheet.getRange(1,1,1,8).setValues([[
-      'Telegram ID','Фамилия','Имя','Отчество','Телефон','Гражданство','Баланс ₽','Дата регистрации'
-    ]]);
-    balSheet.getRange(1,1,1,8).setFontWeight('bold').setBackground('#fce8b2');
+function skipReg(e) {
+  e.preventDefault();
+  const profile = getProfile();
+  if (profile) {
+    hideScreen('regScreen');
+    hideScreen('welcomeScreen');
+    loadSheetData();
+  } else {
+    const heading = document.querySelector('.reg-heading p');
+    heading.style.color = 'var(--a)';
+    heading.textContent = 'Пожалуйста, заполните данные для продолжения';
+    setTimeout(() => {
+      heading.style.color = '';
+      heading.textContent = 'Заполните данные один раз — они нужны для оформления заказов';
+    }, 2500);
   }
-
-  const rows = balSheet.getDataRange().getValues();
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(profile.userId)) {
-      // Обновляем данные, баланс НЕ трогаем
-      balSheet.getRange(i+1, 2, 1, 5).setValues([[
-        profile.lastName || '',
-        profile.firstName || '',
-        profile.middleName || '',
-        profile.phone || '',
-        profile.citizenshipName || ''
-      ]]);
-      return { success: true, updated: true };
-    }
-  }
-
-  // Новый клиент — баланс 0, пополняется вручную
-  balSheet.appendRow([
-    profile.userId,
-    profile.lastName || '',
-    profile.firstName || '',
-    profile.middleName || '',
-    profile.phone || '',
-    profile.citizenshipName || '',
-    0,
-    new Date()
-  ]);
-  return { success: true, created: true };
 }
 
-function updateBalance(userId, amount) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const balSheet = ss.getSheetByName(SHEET_BALANCES);
-  if (!balSheet) return { error: 'Sheet not found' };
-  const rows = balSheet.getDataRange().getValues();
-  for (let i = 1; i < rows.length; i++) {
-    if (String(rows[i][0]) === String(userId)) {
-      balSheet.getRange(i+1, 7).setValue(parseFloat(amount));
-      return { success: true, newBalance: amount };
-    }
-  }
-  return { error: 'User not found' };
-}
-
-function syncData(orders, clients) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  if (clients && clients.length) {
-    const balSheet = ss.getSheetByName(SHEET_BALANCES);
-    if (balSheet) {
-      const existing = balSheet.getDataRange().getValues();
-      clients.forEach(c => {
-        for (let i = 1; i < existing.length; i++) {
-          if (String(existing[i][0]) === String(c.userId)) {
-            balSheet.getRange(i+1, 7).setValue(c.balRub);
-            return;
-          }
-        }
-      });
-    }
-  }
-
-  if (orders && orders.length) {
-    const ordSheet = ss.getSheetByName(SHEET_ORDERS);
-    if (ordSheet) {
-      const existing = ordSheet.getDataRange().getValues();
-      orders.forEach(o => {
-        for (let i = 1; i < existing.length; i++) {
-          if (existing[i][0] === o.id) {
-            ordSheet.getRange(i+1, 10).setValue(o.status);
-            ordSheet.getRange(i+1, 11).setValue(o.price || '');
-            return;
-          }
-        }
-        ordSheet.appendRow([
-          o.id, o.userId, o.userName, o.platform, o.url,
-          o.description, o.qty, o.budget, o.comment,
-          o.status, o.price || '', new Date(o.createdAt)
-        ]);
-      });
-    }
-  }
-
-  return { success: true };
-}
-
-function addOrder(order) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let ordSheet = ss.getSheetByName(SHEET_ORDERS);
-  if (!ordSheet) {
-    ordSheet = ss.insertSheet(SHEET_ORDERS);
-    ordSheet.getRange(1,1,1,12).setValues([[
-      'ID Заявки','User ID','Имя','Площадка','Ссылка',
-      'Описание','Кол-во','Бюджет ¥','Комментарий',
-      'Статус','Цена ¥','Дата'
-    ]]);
-    ordSheet.getRange(1,1,1,12).setFontWeight('bold').setBackground('#fce8b2');
-  }
-  ordSheet.appendRow([
-    order.id, order.userId, order.userName, order.platform, order.url,
-    order.description, order.qty, order.budget, order.comment,
-    'new', '', new Date()
-  ]);
-  return { success: true };
-}
-
-// ══════════════════════════════════════════════════
-// ЗАПУСТИТЕ ОДИН РАЗ для создания листов
-// ══════════════════════════════════════════════════
-function initSheets() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  let ratesSheet = ss.getSheetByName(SHEET_RATES);
-  if (!ratesSheet) ratesSheet = ss.insertSheet(SHEET_RATES);
-  ratesSheet.clearContents();
-  ratesSheet.getRange(1,1,4,3).setValues([
-    ['Ключ',    'Значение', 'Обновлено'],
-    ['CNY_RUB', 12.85,      '10 июн'],
-    ['USD_RUB', 92.40,      '10 июн'],
-    ['USD_CNY', 7.19,       '10 июн'],
-  ]);
-  ratesSheet.getRange(1,1,1,3).setFontWeight('bold').setBackground('#fce8b2');
-  ratesSheet.setColumnWidth(1, 130);
-  ratesSheet.setColumnWidth(2, 110);
-  ratesSheet.setColumnWidth(3, 130);
-
-  let balSheet = ss.getSheetByName(SHEET_BALANCES);
-  if (!balSheet) balSheet = ss.insertSheet(SHEET_BALANCES);
-  balSheet.clearContents();
-  balSheet.getRange(1,1,1,8).setValues([[
-    'Telegram ID','Фамилия','Имя','Отчество','Телефон','Гражданство','Баланс ₽','Дата регистрации'
-  ]]);
-  balSheet.getRange(1,1,1,8).setFontWeight('bold').setBackground('#fce8b2');
-  [120,120,100,120,140,130,100,160].forEach((w,i) => balSheet.setColumnWidth(i+1, w));
-
-  let ordSheet = ss.getSheetByName(SHEET_ORDERS);
-  if (!ordSheet) ordSheet = ss.insertSheet(SHEET_ORDERS);
-  ordSheet.clearContents();
-  ordSheet.getRange(1,1,1,12).setValues([[
-    'ID Заявки','User ID','Имя','Площадка','Ссылка',
-    'Описание','Кол-во','Бюджет ¥','Комментарий',
-    'Статус','Цена ¥','Дата'
-  ]]);
-  ordSheet.getRange(1,1,1,12).setFontWeight('bold').setBackground('#fce8b2');
-
-  SpreadsheetApp.getUi().alert('✅ Листы созданы!');
-}
-
-const SHEET_RATES    = 'Курсы';
-const SHEET_BALANCES = 'Балансы';
-const SHEET_ORDERS   = 'Заявки';
+// Init
+checkRegistration();
+</script>
+</body>
+</html>
