@@ -166,6 +166,120 @@ label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
 .spin{width:16px;height:16px;border:2px solid rgba(0,0,0,.3);border-top-color:#000;border-radius:50%;animation:rot .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
 @keyframes rot{to{transform:rotate(360deg)}}
 
+/* ─── WELCOME SCREEN ─── */
+.welcome-screen{
+  position:fixed;inset:0;z-index:1100;
+  background:var(--bg);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.welcome-screen.hidden{display:none}
+
+.wlc-bg{
+  position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 0%, rgba(240,192,64,.12) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 90% 80%, rgba(232,145,74,.08) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 30% at 10% 60%, rgba(240,192,64,.06) 0%, transparent 50%);
+  pointer-events:none;
+}
+.wlc-grid{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(240,192,64,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(240,192,64,.04) 1px,transparent 1px);
+  background-size:36px 36px;
+  pointer-events:none;
+}
+
+.wlc-body{
+  flex:1;display:flex;flex-direction:column;
+  padding:0 24px;
+  position:relative;z-index:1;
+  justify-content:center;
+}
+
+/* Floating logo */
+.wlc-logo-wrap{
+  display:flex;flex-direction:column;align-items:center;
+  margin-bottom:40px;
+}
+.wlc-icon{
+  width:72px;height:72px;
+  background:linear-gradient(135deg,var(--a),var(--a2));
+  border-radius:22px;
+  display:grid;place-items:center;
+  font-size:34px;
+  box-shadow:0 0 0 1px rgba(240,192,64,.2), 0 16px 48px rgba(240,192,64,.25);
+  margin-bottom:18px;
+  animation:iconFloat 3s ease-in-out infinite;
+}
+@keyframes iconFloat{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-6px)}
+}
+.wlc-title{
+  font-family:var(--display);font-size:28px;font-weight:900;
+  letter-spacing:-1.5px;text-align:center;line-height:1.1;
+  margin-bottom:8px;
+}
+.wlc-title em{color:var(--a);font-style:normal}
+.wlc-tagline{
+  font-size:14px;color:var(--muted);text-align:center;line-height:1.5;
+}
+
+/* Features list */
+.wlc-features{
+  display:flex;flex-direction:column;gap:10px;
+  margin-bottom:40px;
+}
+.wlc-feat{
+  display:flex;align-items:center;gap:12px;
+  background:var(--s1);border:1px solid var(--border);
+  border-radius:12px;padding:12px 14px;
+  animation:featIn .5s ease both;
+}
+.wlc-feat:nth-child(1){animation-delay:.1s}
+.wlc-feat:nth-child(2){animation-delay:.2s}
+.wlc-feat:nth-child(3){animation-delay:.3s}
+.wlc-feat:nth-child(4){animation-delay:.4s}
+@keyframes featIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.wlc-feat-icon{
+  width:36px;height:36px;border-radius:10px;
+  background:rgba(240,192,64,.1);
+  display:grid;place-items:center;font-size:18px;flex-shrink:0;
+}
+.wlc-feat-text strong{display:block;font-size:13px;font-weight:600;margin-bottom:1px}
+.wlc-feat-text span{font-size:11px;color:var(--muted)}
+
+/* Bottom buttons */
+.wlc-footer{
+  flex-shrink:0;padding:0 24px 36px;
+  position:relative;z-index:1;
+  display:flex;flex-direction:column;gap:10px;
+}
+.wlc-btn-reg{
+  width:100%;padding:16px;
+  background:linear-gradient(135deg,var(--a),var(--a2));
+  border:none;border-radius:14px;
+  color:#000;font-family:var(--display);font-size:15px;font-weight:700;
+  cursor:pointer;letter-spacing:.3px;
+  transition:opacity .15s,transform .1s;
+  position:relative;overflow:hidden;
+}
+.wlc-btn-reg::after{content:'';position:absolute;inset:0;background:linear-gradient(rgba(255,255,255,.15),transparent)}
+.wlc-btn-reg:active{transform:scale(.98);opacity:.9}
+
+.wlc-btn-login{
+  width:100%;padding:14px;
+  background:transparent;
+  border:1.5px solid var(--border);border-radius:14px;
+  color:var(--text);font-family:var(--display);font-size:14px;font-weight:600;
+  cursor:pointer;letter-spacing:.3px;
+  transition:border-color .15s,background .15s;
+}
+.wlc-btn-login:active{border-color:var(--a);background:rgba(240,192,64,.05)}
+
 /* ─── REGISTRATION SCREEN ─── */
 .reg-screen{
   position:fixed;inset:0;z-index:1000;
@@ -336,6 +450,61 @@ label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px}
 </style>
 </head>
 <body>
+<!-- ─── WELCOME SCREEN ─── -->
+<div class="welcome-screen" id="welcomeScreen">
+  <div class="wlc-bg"></div>
+  <div class="wlc-grid"></div>
+
+  <div class="wlc-body">
+    <div class="wlc-logo-wrap">
+      <div class="wlc-icon">🛒</div>
+      <div class="wlc-title">China<em>Order</em></div>
+      <div class="wlc-tagline">Покупаем товары из Китая<br>быстро, надёжно, под ключ</div>
+    </div>
+
+    <div class="wlc-features">
+      <div class="wlc-feat">
+        <div class="wlc-feat-icon">🏪</div>
+        <div class="wlc-feat-text">
+          <strong>Любой маркетплейс Китая</strong>
+          <span>1688, Taobao, Tmall, Alibaba, Pinduoduo</span>
+        </div>
+      </div>
+      <div class="wlc-feat">
+        <div class="wlc-feat-icon">📦</div>
+        <div class="wlc-feat-text">
+          <strong>Выкуп и доставка</strong>
+          <span>Принимаем заявки, заказываем и доставляем</span>
+        </div>
+      </div>
+      <div class="wlc-feat">
+        <div class="wlc-feat-icon">💱</div>
+        <div class="wlc-feat-text">
+          <strong>Актуальный курс юаня</strong>
+          <span>Конвертер ₽ → ¥ прямо в приложении</span>
+        </div>
+      </div>
+      <div class="wlc-feat">
+        <div class="wlc-feat-icon">📊</div>
+        <div class="wlc-feat-text">
+          <strong>Личный баланс и история</strong>
+          <span>Отслеживайте заказы и статусы онлайн</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wlc-footer">
+    <button class="wlc-btn-reg" onclick="goToRegister()">
+      Зарегистрироваться →
+    </button>
+    <button class="wlc-btn-login" onclick="goToLogin()">
+      Уже есть аккаунт — Войти
+    </button>
+  </div>
+</div>
+<!-- ─── END WELCOME ─── -->
+
 <!-- ─── REGISTRATION SCREEN ─── -->
 <div class="reg-screen" id="regScreen">
   <div class="reg-top-band">
@@ -806,7 +975,7 @@ function renderOrders() {
 }
 
 // ═══════════════════════════════════════════
-// REGISTRATION
+// WELCOME / REGISTRATION FLOW
 // ═══════════════════════════════════════════
 
 function getProfile() {
@@ -817,11 +986,57 @@ function saveProfile(p) { localStorage.setItem('co_profile', JSON.stringify(p));
 function checkRegistration() {
   const profile = getProfile();
   if (profile) {
-    // Already registered — hide reg screen
-    document.getElementById('regScreen').classList.add('hidden');
+    // Already registered — skip welcome & reg screens
+    hideScreen('welcomeScreen');
+    hideScreen('regScreen');
     loadSheetData();
   }
-  // else: reg screen stays visible
+  // else: welcome screen stays visible (default)
+}
+
+function hideScreen(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('hidden');
+}
+
+function showScreen(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('hidden');
+}
+
+function goToRegister() {
+  if (tg) tg.HapticFeedback?.impactOccurred('light');
+  // Animate out welcome
+  const w = document.getElementById('welcomeScreen');
+  w.style.transition = 'opacity .3s, transform .3s';
+  w.style.opacity = '0';
+  w.style.transform = 'translateY(-20px)';
+  setTimeout(() => {
+    hideScreen('welcomeScreen');
+    w.style.opacity = '';
+    w.style.transform = '';
+    showScreen('regScreen');
+  }, 280);
+}
+
+function goToLogin() {
+  const profile = getProfile();
+  if (profile) {
+    // Has profile — go straight to app
+    hideScreen('welcomeScreen');
+    loadSheetData();
+  } else {
+    // No profile — must register, show hint
+    const btn = document.querySelector('.wlc-btn-login');
+    btn.textContent = 'Сначала нужно зарегистрироваться';
+    btn.style.borderColor = 'var(--a)';
+    btn.style.color = 'var(--a)';
+    setTimeout(() => {
+      btn.textContent = 'Уже есть аккаунт — Войти';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+    }, 2000);
+  }
 }
 
 // Format phone number as user types
@@ -920,7 +1135,8 @@ function submitRegistration() {
     document.getElementById('regScreen').style.transition = 'opacity .4s';
     document.getElementById('regScreen').style.opacity = '0';
     setTimeout(() => {
-      document.getElementById('regScreen').classList.add('hidden');
+      hideScreen('regScreen');
+      hideScreen('welcomeScreen');
       loadSheetData();
     }, 400);
   }, 700);
@@ -930,10 +1146,10 @@ function skipReg(e) {
   e.preventDefault();
   const profile = getProfile();
   if (profile) {
-    document.getElementById('regScreen').classList.add('hidden');
+    hideScreen('regScreen');
+    hideScreen('welcomeScreen');
     loadSheetData();
   } else {
-    // Show hint — must register
     const heading = document.querySelector('.reg-heading p');
     heading.style.color = 'var(--a)';
     heading.textContent = 'Пожалуйста, заполните данные для продолжения';
