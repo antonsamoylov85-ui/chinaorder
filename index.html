@@ -1127,17 +1127,18 @@ async function submitRegistration() {
   // ── Сохраняем локально сразу ──
   saveProfile(profile);
 
-  // ── Отправляем в Google Sheets напрямую через fetch ──
+  // ── Отправляем в Google Sheets ──
   try {
-    const res = await fetch(SHEET_API_URL, {
+    // Используем no-cors так как Apps Script не поддерживает CORS для POST из браузера
+    await fetch(SHEET_API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action: 'register', profile })
     });
-    const result = await res.json();
-    console.log('Register result:', result);
+    console.log('Register sent to Sheets');
   } catch(e) {
-    console.warn('Sheets unavailable, saved locally only:', e);
+    console.warn('Sheets error:', e);
   }
 
   btn.innerHTML = '✓ Готово!';
